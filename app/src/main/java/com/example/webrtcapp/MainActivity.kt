@@ -30,6 +30,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Log.d("WebRTCApp", "onCreate started")
 
+        // Запрос разрешений на камеру и микрофон
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             Log.d("WebRTCApp", "Requesting permissions")
@@ -104,8 +105,8 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(200.dp)
-                            .padding(8.dp))
-                    {
+                            .padding(8.dp)
+                    ) {
                         AndroidView(
                             factory = { context ->
                                 Log.d("WebRTCApp", "Creating local video view")
@@ -136,6 +137,7 @@ class MainActivity : ComponentActivity() {
     private fun connectToRoom(username: String, room: String) {
         Log.d("WebRTCApp", "Connecting to room: $room as $username")
 
+        // Инициализация WebRTCClient
         webRTCClient = WebRTCClient(
             context = this,
             observer = object : PeerConnection.Observer {
@@ -170,11 +172,13 @@ class MainActivity : ComponentActivity() {
             }
         )
 
+        // Создание локального потока
         localVideoView?.let {
             Log.d("WebRTCApp", "Creating local stream")
             webRTCClient.createLocalStream(it)
         }
 
+        // Инициализация WebSocketClient
         webSocketClient = WebSocketClient(object : WebSocketListener() {
             override fun onMessage(webSocket: WebSocket, text: String) {
                 Log.d("WebRTCApp", "Received message: $text")
@@ -188,8 +192,12 @@ class MainActivity : ComponentActivity() {
                         webRTCClient.setRemoteDescription(sdp, object : SdpObserver {
                             override fun onCreateSuccess(desc: SessionDescription?) {}
                             override fun onSetSuccess() {}
-                            override fun onCreateFailure(error: String?) {}
-                            override fun onSetFailure(error: String?) {}
+                            override fun onCreateFailure(error: String?) {
+                                Log.e("WebRTCApp", "Failed to create remote description: $error")
+                            }
+                            override fun onSetFailure(error: String?) {
+                                Log.e("WebRTCApp", "Failed to set remote description: $error")
+                            }
                         })
                     }
                     "ice_candidate" -> {
@@ -205,9 +213,12 @@ class MainActivity : ComponentActivity() {
             }
         })
 
+
+        // Подключение к WebSocket
         Log.d("WebRTCApp", "Connecting WebSocket")
         webSocketClient.connect("wss://anybet.site/ws")
 
+        // Отправка сообщения о присоединении к комнате
         val joinMessage = JSONObject().apply {
             put("type", "join")
             put("username", username)
@@ -232,15 +243,23 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun onSetSuccess() {}
-            override fun onCreateFailure(error: String?) {}
-            override fun onSetFailure(error: String?) {}
+            override fun onCreateFailure(error: String?) {
+                Log.e("WebRTCApp", "Failed to create offer: $error")
+            }
+            override fun onSetFailure(error: String?) {
+                Log.e("WebRTCApp", "Failed to set offer: $error")
+            }
         })
     }
 
     override fun onDestroy() {
         Log.d("WebRTCApp", "onDestroy")
-        webSocketClient.disconnect()
-        webRTCClient.close()
+        if (::webSocketClient.isInitialized) {
+            webSocketClient.disconnect()
+        }
+        if (::webRTCClient.isInitialized) {
+            webRTCClient.close()
+        }
         super.onDestroy()
     }
 }

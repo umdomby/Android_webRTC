@@ -1,5 +1,5 @@
 package com.example.webrtcapp
-
+import android.util.Log
 import android.content.Context
 import org.webrtc.*
 
@@ -18,6 +18,15 @@ class WebRTCClient(
     private lateinit var localAudioTrack: AudioTrack
 
     init {
+        Log.d("WebRTCApp", "Initializing WebRTCClient")
+
+        // Проверка поддержки OpenGL ES 2.0
+        if (eglBase.eglBaseContext == null) {
+            Log.e("WebRTCApp", "OpenGL ES 2.0 not supported")
+            throw RuntimeException("OpenGL ES 2.0 not supported")
+        }
+
+        // Инициализация WebRTC
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions.builder(context)
                 .setEnableInternalTracer(true)
@@ -36,6 +45,8 @@ class WebRTCClient(
     }
 
     fun createLocalStream(localVideoOutput: SurfaceViewRenderer) {
+        Log.d("WebRTCApp", "Creating local stream")
+
         // Создаем аудио трек
         val audioConstraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
