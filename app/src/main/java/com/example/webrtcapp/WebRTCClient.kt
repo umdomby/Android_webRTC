@@ -76,6 +76,8 @@ class WebRTCClient(
         localVideoTrack = peerConnectionFactory.createVideoTrack("100", videoSource)
         localVideoTrack.addSink(localVideoOutput)
         peerConnection.addTrack(localVideoTrack)
+
+        Log.d("WebRTCApp", "Local stream created and added to PeerConnection")
     }
 
     private fun createCameraCapturer(): VideoCapturer {

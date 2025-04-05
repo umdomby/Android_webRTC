@@ -112,6 +112,7 @@ class MainActivity : ComponentActivity() {
                                 Log.d("WebRTCApp", "Creating local video view")
                                 SurfaceViewRenderer(context).also {
                                     it.init(EglBase.create().eglBaseContext, null)
+                                    it.setMirror(true) // Зеркальное отображение для фронтальной камеры
                                     localVideoView = it
                                 }
                             },
@@ -130,6 +131,22 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 1) {
+            if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                Log.d("WebRTCApp", "Permissions granted")
+                // Повторная инициализация после получения разрешений
+                localVideoView?.let {
+                    webRTCClient.createLocalStream(it)
+                }
+            } else {
+                Log.e("WebRTCApp", "Permissions denied")
+                // Показать сообщение пользователю
             }
         }
     }
@@ -164,7 +181,10 @@ class MainActivity : ComponentActivity() {
                 override fun onIceConnectionChange(p0: PeerConnection.IceConnectionState?) {}
                 override fun onIceConnectionReceivingChange(p0: Boolean) {}
                 override fun onIceGatheringChange(p0: PeerConnection.IceGatheringState?) {}
-                override fun onAddStream(p0: MediaStream?) {}
+                override fun onAddStream(stream: MediaStream?) {
+                    Log.d("WebRTCApp", "onAddStream: Remote stream added")
+                    stream?.videoTracks?.firstOrNull()?.addSink(remoteVideoView)
+                }
                 override fun onRemoveStream(p0: MediaStream?) {}
                 override fun onDataChannel(p0: DataChannel?) {}
                 override fun onRenegotiationNeeded() {}
@@ -212,7 +232,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         })
-
 
         // Подключение к WebSocket
         Log.d("WebRTCApp", "Connecting WebSocket")
