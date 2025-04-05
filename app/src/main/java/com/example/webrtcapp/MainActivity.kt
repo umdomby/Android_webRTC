@@ -146,7 +146,21 @@ class MainActivity : ComponentActivity() {
                 }
 
                 override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {
-                    // Обработка удаления ICE кандидатов
+                    candidates?.let {
+                        val message = JSONObject().apply {
+                            put("type", "remove_ice_candidates")
+                            put("iceCandidates", JSONObject().apply {
+                                put("candidates", it.map { candidate ->
+                                    JSONObject().apply {
+                                        put("sdpMid", candidate.sdpMid)
+                                        put("sdpMLineIndex", candidate.sdpMLineIndex)
+                                        put("sdp", candidate.sdp)
+                                    }
+                                })
+                            })
+                        }
+                        webSocketClient.send(message)
+                    }
                 }
 
                 override fun onSignalingChange(p0: PeerConnection.SignalingState?) {}
@@ -158,6 +172,7 @@ class MainActivity : ComponentActivity() {
                 override fun onDataChannel(p0: DataChannel?) {}
                 override fun onRenegotiationNeeded() {}
                 override fun onAddTrack(p0: RtpReceiver?, p1: Array<out MediaStream>?) {}
+
             }
         )
 
