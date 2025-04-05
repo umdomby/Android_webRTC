@@ -2,12 +2,12 @@ package com.example.webrtcapp
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.webrtc.SdpObserver
-
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -28,9 +28,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d("WebRTCApp", "onCreate started")
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            Log.d("WebRTCApp", "Requesting permissions")
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO),
@@ -68,6 +70,7 @@ class MainActivity : ComponentActivity() {
 
                     Button(
                         onClick = {
+                            Log.d("WebRTCApp", "Connect button clicked")
                             connectToRoom(username, room)
                             isConnected = true
                         },
@@ -80,6 +83,7 @@ class MainActivity : ComponentActivity() {
 
                     Button(
                         onClick = {
+                            Log.d("WebRTCApp", "Start call button clicked")
                             startCall()
                             isCallActive = true
                         },
@@ -100,10 +104,11 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(200.dp)
-                            .padding(8.dp)
-                    ) {
+                            .padding(8.dp))
+                    {
                         AndroidView(
                             factory = { context ->
+                                Log.d("WebRTCApp", "Creating local video view")
                                 SurfaceViewRenderer(context).also {
                                     it.init(EglBase.create().eglBaseContext, null)
                                     localVideoView = it
@@ -114,6 +119,7 @@ class MainActivity : ComponentActivity() {
 
                         AndroidView(
                             factory = { context ->
+                                Log.d("WebRTCApp", "Creating remote video view")
                                 SurfaceViewRenderer(context).also {
                                     it.init(EglBase.create().eglBaseContext, null)
                                     remoteVideoView = it
@@ -128,10 +134,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun connectToRoom(username: String, room: String) {
+        Log.d("WebRTCApp", "Connecting to room: $room as $username")
+
         webRTCClient = WebRTCClient(
             context = this,
             observer = object : PeerConnection.Observer {
                 override fun onIceCandidate(candidate: IceCandidate?) {
+                    Log.d("WebRTCApp", "onIceCandidate: ${candidate?.sdpMid}")
                     candidate?.let {
                         val message = JSONObject().apply {
                             put("type", "ice_candidate")
@@ -146,21 +155,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {
-                    candidates?.let {
-                        val message = JSONObject().apply {
-                            put("type", "remove_ice_candidates")
-                            put("iceCandidates", JSONObject().apply {
-                                put("candidates", it.map { candidate ->
-                                    JSONObject().apply {
-                                        put("sdpMid", candidate.sdpMid)
-                                        put("sdpMLineIndex", candidate.sdpMLineIndex)
-                                        put("sdp", candidate.sdp)
-                                    }
-                                })
-                            })
-                        }
-                        webSocketClient.send(message)
-                    }
+                    Log.d("WebRTCApp", "onIceCandidatesRemoved: ${candidates?.size} candidates")
                 }
 
                 override fun onSignalingChange(p0: PeerConnection.SignalingState?) {}
@@ -172,14 +167,17 @@ class MainActivity : ComponentActivity() {
                 override fun onDataChannel(p0: DataChannel?) {}
                 override fun onRenegotiationNeeded() {}
                 override fun onAddTrack(p0: RtpReceiver?, p1: Array<out MediaStream>?) {}
-
             }
         )
 
-        localVideoView?.let { webRTCClient.createLocalStream(it) }
+        localVideoView?.let {
+            Log.d("WebRTCApp", "Creating local stream")
+            webRTCClient.createLocalStream(it)
+        }
 
         webSocketClient = WebSocketClient(object : WebSocketListener() {
             override fun onMessage(webSocket: WebSocket, text: String) {
+                Log.d("WebRTCApp", "Received message: $text")
                 val message = JSONObject(text)
                 when (message.getString("type")) {
                     "offer" -> {
@@ -207,18 +205,23 @@ class MainActivity : ComponentActivity() {
             }
         })
 
+        Log.d("WebRTCApp", "Connecting WebSocket")
         webSocketClient.connect("wss://anybet.site/ws")
+
         val joinMessage = JSONObject().apply {
             put("type", "join")
             put("username", username)
             put("room", room)
         }
+        Log.d("WebRTCApp", "Sending join message")
         webSocketClient.send(joinMessage)
     }
 
     private fun startCall() {
+        Log.d("WebRTCApp", "Starting call")
         webRTCClient.createOffer(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription?) {
+                Log.d("WebRTCApp", "Offer created")
                 desc?.let {
                     val message = JSONObject().apply {
                         put("type", "offer")
@@ -235,6 +238,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        Log.d("WebRTCApp", "onDestroy")
         webSocketClient.disconnect()
         webRTCClient.close()
         super.onDestroy()

@@ -1,15 +1,21 @@
 package com.example.webrtcapp
+
+import android.content.Context
 import org.webrtc.*
 
 class WebRTCClient(
-    private val context: android.content.Context,
+    private val context: Context,
     private val observer: PeerConnection.Observer
 ) {
     private val peerConnectionFactory: PeerConnectionFactory
-    private val iceServer = listOf(
+    private val iceServers = listOf(
         PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
     )
     private val peerConnection: PeerConnection
+    private val eglBase: EglBase = EglBase.create()
+
+    private lateinit var localVideoTrack: VideoTrack
+    private lateinit var localAudioTrack: AudioTrack
 
     init {
         PeerConnectionFactory.initialize(
@@ -23,11 +29,14 @@ class WebRTCClient(
             .setOptions(options)
             .createPeerConnectionFactory()
 
-        val rtcConfig = PeerConnection.RTCConfiguration(iceServer)
+        val rtcConfig = PeerConnection.RTCConfiguration(iceServers).apply {
+            sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+        }
         peerConnection = peerConnectionFactory.createPeerConnection(rtcConfig, observer)!!
     }
 
     fun createLocalStream(localVideoOutput: SurfaceViewRenderer) {
+        // Создаем аудио трек
         val audioConstraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
@@ -36,11 +45,13 @@ class WebRTCClient(
         }
 
         val audioSource = peerConnectionFactory.createAudioSource(audioConstraints)
-        val localAudioTrack = peerConnectionFactory.createAudioTrack("101", audioSource)
+        localAudioTrack = peerConnectionFactory.createAudioTrack("101", audioSource)
+        peerConnection.addTrack(localAudioTrack)
 
+        // Создаем видео трек
         val surfaceTextureHelper = SurfaceTextureHelper.create(
             "CaptureThread",
-            EglBase.create().eglBaseContext
+            eglBase.eglBaseContext
         )
         val videoSource = peerConnectionFactory.createVideoSource(false)
         val videoCapturer = createCameraCapturer()
@@ -51,13 +62,9 @@ class WebRTCClient(
         )
         videoCapturer.startCapture(640, 480, 30)
 
-        val localVideoTrack = peerConnectionFactory.createVideoTrack("100", videoSource)
+        localVideoTrack = peerConnectionFactory.createVideoTrack("100", videoSource)
         localVideoTrack.addSink(localVideoOutput)
-
-        val localStream = peerConnectionFactory.createLocalMediaStream("local_stream")
-        localStream.addTrack(localAudioTrack)
-        localStream.addTrack(localVideoTrack)
-        peerConnection.addStream(localStream)
+        peerConnection.addTrack(localVideoTrack)
     }
 
     private fun createCameraCapturer(): VideoCapturer {
@@ -90,6 +97,7 @@ class WebRTCClient(
     }
 
     fun close() {
-        peerConnection.close()
+        peerConnection.dispose()
+        peerConnectionFactory.dispose()
     }
 }
