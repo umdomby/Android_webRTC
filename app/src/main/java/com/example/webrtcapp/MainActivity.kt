@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -18,47 +20,38 @@ import org.json.JSONObject
 import org.webrtc.*
 import com.example.webrtcapp.WebSocketListener
 
-
 class MainActivity : ComponentActivity() {
-
-
     private lateinit var webRTCClient: WebRTCClient
     private lateinit var webSocketClient: WebSocketClient
     private var remoteVideoView: SurfaceViewRenderer? = null
     private val eglBase = EglBase.create()
 
-    // Добавленная функция проверки разрешения камеры
-    private fun checkCameraPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
-    }
+    private val requiredPermissions = arrayOf(
+        Manifest.permission.CAMERA,
+        Manifest.permission.RECORD_AUDIO,
+        Manifest.permission.MODIFY_AUDIO_SETTINGS
+    )
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        if (permissions.all { it.value }) {
-            if (checkCameraPermission()) {
-                initializeWebRTC()
-            } else {
-                Log.e("WebRTCApp", "Camera permission not granted")
-            }
+        val allGranted = permissions.all { it.value }
+        if (allGranted) {
+            initializeWebRTC()
         } else {
-            Log.e("WebRTCApp", "Permissions not granted")
+            Toast.makeText(
+                this,
+                "Для работы приложения необходимы все разрешения",
+                Toast.LENGTH_LONG
+            ).show()
+            finish()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val requiredPermissions = arrayOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.MODIFY_AUDIO_SETTINGS
-        )
-
-        if (requiredPermissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) {
+        if (checkAllPermissionsGranted()) {
             initializeWebRTC()
         } else {
             requestPermissionLauncher.launch(requiredPermissions)
@@ -66,93 +59,104 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             WebRTCAppTheme {
-                var username by remember { mutableStateOf("User${(1000..9999).random()}") }
-                var room by remember { mutableStateOf("room1") }
-                var isConnected by remember { mutableStateOf(false) }
-                var isCallActive by remember { mutableStateOf(false) }
-                var error by remember { mutableStateOf("") }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
-                ) {
-                    TextField(
-                        value = username,
-                        onValueChange = { username = it },
-                        label = { Text("Username") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextField(
-                        value = room,
-                        onValueChange = { room = it },
-                        label = { Text("Room") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Button(
-                        onClick = {
-                            connectToRoom(username, room)
-                            isConnected = true
-                        },
-                        enabled = !isConnected
-                    ) {
-                        Text(if (isConnected) "Connected" else "Connect")
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Button(
-                        onClick = {
-                            startCall()
-                            isCallActive = true
-                        },
-                        enabled = isConnected && !isCallActive
-                    ) {
-                        Text(if (isCallActive) "Call Active" else "Start Call")
-                    }
-
-                    if (error.isNotEmpty()) {
-                        Text(
-                            text = error,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(8.dp)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(300.dp)
-                            .padding(8.dp)
-                    ) {
-                        AndroidView(
-                            factory = { context ->
-                                SurfaceViewRenderer(context).also { view ->
-                                    view.init(eglBase.eglBaseContext, null)
-                                    view.setMirror(true)
-                                    view.setEnableHardwareScaler(true)
-                                    webRTCClient.createLocalStream(view)
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        AndroidView(
-                            factory = { context ->
-                                SurfaceViewRenderer(context).also { view ->
-                                    view.init(eglBase.eglBaseContext, null)
-                                    view.setEnableHardwareScaler(true)
-                                    remoteVideoView = view
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
+                WebRTCAppUI()
             }
+        }
+    }
+
+    @Composable
+    fun WebRTCAppUI() {
+        var username by remember { mutableStateOf("User${(1000..9999).random()}") }
+        var room by remember { mutableStateOf("room1") }
+        var isConnected by remember { mutableStateOf(false) }
+        var isCallActive by remember { mutableStateOf(false) }
+        var error by remember { mutableStateOf("") }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            TextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Username") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            TextField(
+                value = room,
+                onValueChange = { room = it },
+                label = { Text("Room") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    connectToRoom(username, room)
+                    isConnected = true
+                },
+                enabled = !isConnected
+            ) {
+                Text(if (isConnected) "Connected" else "Connect")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    startCall()
+                    isCallActive = true
+                },
+                enabled = isConnected && !isCallActive
+            ) {
+                Text(if (isCallActive) "Call Active" else "Start Call")
+            }
+
+            if (error.isNotEmpty()) {
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp)
+                    .padding(8.dp)
+            ) {
+                AndroidView(
+                    factory = { context ->
+                        SurfaceViewRenderer(context).also { view ->
+                            view.init(eglBase.eglBaseContext, null)
+                            view.setMirror(true)
+                            view.setEnableHardwareScaler(true)
+                            webRTCClient.createLocalStream(view)
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+
+                AndroidView(
+                    factory = { context ->
+                        SurfaceViewRenderer(context).also { view ->
+                            view.init(eglBase.eglBaseContext, null)
+                            view.setEnableHardwareScaler(true)
+                            remoteVideoView = view
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+
+    private fun checkAllPermissionsGranted(): Boolean {
+        return requiredPermissions.all { permission ->
+            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
         }
     }
 
@@ -177,7 +181,6 @@ class MainActivity : ComponentActivity() {
                 override fun onAddStream(stream: MediaStream?) {
                     Log.d("WebRTCApp", "onAddStream: ${stream?.id}")
                     stream?.videoTracks?.forEach { track ->
-                        Log.d("WebRTCApp", "Video track: ${track.id()}, enabled: ${track.enabled()}")
                         track.addSink(remoteVideoView)
                     }
                 }
@@ -198,18 +201,14 @@ class MainActivity : ComponentActivity() {
             override fun onMessage(message: JSONObject) {
                 runOnUiThread {
                     try {
-                        if (message.has("type")) {
-                            when (message.getString("type")) {
-                                "offer" -> handleOffer(message)
-                                "answer" -> handleAnswer(message)
-                                "ice_candidate" -> handleIceCandidate(message)
-                                else -> Log.w("WebRTCApp", "Unknown message type: ${message.getString("type")}")
-                            }
-                        } else {
-                            Log.w("WebRTCApp", "Received message without type: $message")
+                        when (message.getString("type")) {
+                            "offer" -> handleOffer(message)
+                            "answer" -> handleAnswer(message)
+                            "ice_candidate" -> handleIceCandidate(message)
+                            else -> Log.w("WebRTCApp", "Unknown message type")
                         }
                     } catch (e: Exception) {
-                        Log.e("WebRTCApp", "Error processing message: ${e.message}")
+                        Log.e("WebRTCApp", "Error processing message", e)
                     }
                 }
             }
@@ -233,7 +232,6 @@ class MainActivity : ComponentActivity() {
             SessionDescription.Type.OFFER,
             message.getJSONObject("sdp").getString("sdp")
         )
-
         webRTCClient.setRemoteDescription(sdp, object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription?) {}
             override fun onSetSuccess() {
@@ -297,7 +295,6 @@ class MainActivity : ComponentActivity() {
 
     private fun connectToRoom(username: String, room: String) {
         webSocketClient.connect("wss://anybet.site/ws")
-
         val joinMessage = JSONObject().apply {
             put("type", "join")
             put("username", username)

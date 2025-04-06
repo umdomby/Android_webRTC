@@ -26,12 +26,10 @@ class WebSocketClient(private val listener: WebSocketListener) {
 
         webSocket = client?.newWebSocket(request, object : okhttp3.WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.d("WebRTCApp", "WebSocket connected")
                 listener.onConnected()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d("WebRTCApp", "WebSocket message: $text")
                 try {
                     listener.onMessage(JSONObject(text))
                 } catch (e: Exception) {
@@ -40,12 +38,10 @@ class WebSocketClient(private val listener: WebSocketListener) {
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d("WebRTCApp", "WebSocket closed: $reason")
                 listener.onDisconnected()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e("WebRTCApp", "WebSocket error: ${t.message}")
                 listener.onError(t.message ?: "Unknown error")
             }
         })
@@ -55,7 +51,6 @@ class WebSocketClient(private val listener: WebSocketListener) {
         try {
             webSocket?.send(message.toString())
         } catch (e: Exception) {
-            Log.e("WebRTCApp", "Failed to send message: ${e.message}")
             listener.onError("Failed to send message: ${e.message}")
         }
     }
