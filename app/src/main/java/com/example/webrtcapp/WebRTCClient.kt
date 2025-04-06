@@ -71,7 +71,11 @@ class WebRTCClient(
             context,
             videoSource.capturerObserver
         )
-        videoCapturer.startCapture(640, 480, 30)
+        try {
+            videoCapturer.startCapture(640, 480, 30)
+        } catch (e: Exception) {
+            Log.e("WebRTCApp", "Failed to start capturer: ${e.message}")
+        }
 
         localVideoTrack = peerConnectionFactory.createVideoTrack("100", videoSource)
         localVideoTrack.addSink(localVideoOutput)
@@ -84,13 +88,16 @@ class WebRTCClient(
         val enumerator = Camera2Enumerator(context)
         val deviceNames = enumerator.deviceNames
 
+        if (deviceNames.isEmpty()) {
+            Log.w("WebRTCApp", "No cameras found, trying to create fake capturer for emulator")
+        }
+
         for (deviceName in deviceNames) {
             if (enumerator.isFrontFacing(deviceName)) {
                 return enumerator.createCapturer(deviceName, null)
             }
         }
-
-        throw RuntimeException("Front facing camera not found")
+        return enumerator.createCapturer(deviceNames.first(), null)
     }
 
     fun createOffer(sdpObserver: SdpObserver) {
