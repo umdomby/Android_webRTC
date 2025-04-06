@@ -18,17 +18,32 @@ import org.json.JSONObject
 import org.webrtc.*
 import com.example.webrtcapp.WebSocketListener
 
+
 class MainActivity : ComponentActivity() {
+
+
     private lateinit var webRTCClient: WebRTCClient
     private lateinit var webSocketClient: WebSocketClient
     private var remoteVideoView: SurfaceViewRenderer? = null
     private val eglBase = EglBase.create()
 
+    // Добавленная функция проверки разрешения камеры
+    private fun checkCameraPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions.all { it.value }) {
-            initializeWebRTC()
+            if (checkCameraPermission()) {
+                initializeWebRTC()
+            } else {
+                Log.e("WebRTCApp", "Camera permission not granted")
+            }
         } else {
             Log.e("WebRTCApp", "Permissions not granted")
         }
@@ -161,7 +176,10 @@ class MainActivity : ComponentActivity() {
 
                 override fun onAddStream(stream: MediaStream?) {
                     Log.d("WebRTCApp", "onAddStream: ${stream?.id}")
-                    stream?.videoTracks?.firstOrNull()?.addSink(remoteVideoView)
+                    stream?.videoTracks?.forEach { track ->
+                        Log.d("WebRTCApp", "Video track: ${track.id()}, enabled: ${track.enabled()}")
+                        track.addSink(remoteVideoView)
+                    }
                 }
 
                 override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {}

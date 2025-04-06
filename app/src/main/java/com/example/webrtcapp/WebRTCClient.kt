@@ -87,26 +87,49 @@ class WebRTCClient(
     }
 
     private fun createCameraCapturer(): VideoCapturer? {
+        // 1. Сначала пробуем Camera2 API
         val enumerator = Camera2Enumerator(context)
         val deviceNames = enumerator.deviceNames
 
-        for (deviceName in deviceNames) {
-            if (enumerator.isFrontFacing(deviceName)) {
-                Log.d("WebRTCApp", "Creating front facing camera capturer.")
-                return enumerator.createCapturer(deviceName, null)
+        if (deviceNames.isNotEmpty()) {
+            Log.d("WebRTCApp", "Available cameras: ${deviceNames.joinToString()}")
+
+            // Пробуем найти фронтальную камеру
+            for (deviceName in deviceNames) {
+                if (enumerator.isFrontFacing(deviceName)) {
+                    Log.d("WebRTCApp", "Using front camera: $deviceName")
+                    return enumerator.createCapturer(deviceName, null)
+                }
             }
+
+            // Если фронтальной нет, используем первую доступную
+            Log.d("WebRTCApp", "Using first available camera: ${deviceNames[0]}")
+            return enumerator.createCapturer(deviceNames[0], null)
         }
 
-        for (deviceName in deviceNames) {
-            if (!enumerator.isFrontFacing(deviceName)) {
-                Log.d("WebRTCApp", "Creating other camera capturer.")
-                return enumerator.createCapturer(deviceName, null)
-            }
-        }
-
-        Log.e("WebRTCApp", "No camera found")
-        return null
+        // 2. Если камеры не найдены, пробуем использовать эмуляторную камеру
+        Log.w("WebRTCApp", "No cameras found, trying emulator camera workaround")
+        return createEmulatorCameraCapturer()
     }
+    private fun createEmulatorCameraCapturer(): VideoCapturer? {
+        return try {
+            // Для старых версий WebRTC
+            val constructor = Class.forName("org.webrtc.Camera1Enumerator")
+                .getDeclaredConstructor()
+                .newInstance() as CameraEnumerator
+            val deviceNames = constructor.deviceNames
+
+            if (deviceNames.isNotEmpty()) {
+                constructor.createCapturer(deviceNames[0], null)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("WebRTCApp", "Failed to create emulator camera capturer", e)
+            null
+        }
+    }
+
 
     fun createOffer(sdpObserver: SdpObserver) {
         val constraints = MediaConstraints().apply {
