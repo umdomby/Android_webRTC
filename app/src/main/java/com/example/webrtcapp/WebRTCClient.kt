@@ -2,6 +2,7 @@ package com.example.webrtcapp
 
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
 import org.webrtc.*
 
 class WebRTCClient(
@@ -64,6 +65,7 @@ class WebRTCClient(
 
         videoCapturer = createCameraCapturer() ?: run {
             Log.e("WebRTCApp", "Failed to create camera capturer")
+            Toast.makeText(context, "Failed to initialize camera", Toast.LENGTH_LONG).show()
             return
         }
 

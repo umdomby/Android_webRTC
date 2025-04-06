@@ -206,10 +206,12 @@ class MainActivity : ComponentActivity() {
                                 "offer" -> handleOffer(message)
                                 "answer" -> handleAnswer(message)
                                 "ice_candidate" -> handleIceCandidate(message)
-                                else -> Log.w("WebRTCApp", "Unknown message type")
+                                "join" -> Log.d("WebRTCApp", "User joined the room")
+                                "leave" -> Log.d("WebRTCApp", "User left the room")
+                                else -> Log.w("WebRTCApp", "Unknown message type: ${message.getString("type")}")
                             }
                         } else {
-                            Log.w("WebRTCApp", "Message does not contain 'type' field")
+                            Log.w("WebRTCApp", "Message does not contain 'type' field: $message")
                         }
                     } catch (e: Exception) {
                         Log.e("WebRTCApp", "Error processing message", e)
