@@ -201,11 +201,15 @@ class MainActivity : ComponentActivity() {
             override fun onMessage(message: JSONObject) {
                 runOnUiThread {
                     try {
-                        when (message.getString("type")) {
-                            "offer" -> handleOffer(message)
-                            "answer" -> handleAnswer(message)
-                            "ice_candidate" -> handleIceCandidate(message)
-                            else -> Log.w("WebRTCApp", "Unknown message type")
+                        if (message.has("type")) {
+                            when (message.getString("type")) {
+                                "offer" -> handleOffer(message)
+                                "answer" -> handleAnswer(message)
+                                "ice_candidate" -> handleIceCandidate(message)
+                                else -> Log.w("WebRTCApp", "Unknown message type")
+                            }
+                        } else {
+                            Log.w("WebRTCApp", "Message does not contain 'type' field")
                         }
                     } catch (e: Exception) {
                         Log.e("WebRTCApp", "Error processing message", e)
