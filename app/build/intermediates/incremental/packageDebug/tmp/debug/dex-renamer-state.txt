@@ -1,4 +1,4 @@
-#Sun Apr 06 15:45:01 MSK 2025
+#Sun Apr 06 15:49:29 MSK 2025
 base.0=D\:\\AndroidStudio\\WebRTCApp\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes.dex
 base.1=D\:\\AndroidStudio\\WebRTCApp\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\0\\classes.dex
 base.2=D\:\\AndroidStudio\\WebRTCApp\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\7\\classes.dex

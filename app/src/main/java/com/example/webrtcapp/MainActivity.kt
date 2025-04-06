@@ -179,10 +179,19 @@ class MainActivity : ComponentActivity() {
         webSocketClient = WebSocketClient(object : WebSocketListener {
             override fun onMessage(message: JSONObject) {
                 runOnUiThread {
-                    when (message.getString("type")) {
-                        "offer" -> handleOffer(message)
-                        "answer" -> handleAnswer(message)
-                        "ice_candidate" -> handleIceCandidate(message)
+                    try {
+                        if (message.has("type")) {
+                            when (message.getString("type")) {
+                                "offer" -> handleOffer(message)
+                                "answer" -> handleAnswer(message)
+                                "ice_candidate" -> handleIceCandidate(message)
+                                else -> Log.w("WebRTCApp", "Unknown message type: ${message.getString("type")}")
+                            }
+                        } else {
+                            Log.w("WebRTCApp", "Received message without type: $message")
+                        }
+                    } catch (e: Exception) {
+                        Log.e("WebRTCApp", "Error processing message: ${e.message}")
                     }
                 }
             }
