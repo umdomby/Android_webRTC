@@ -205,9 +205,10 @@ class MainActivity : ComponentActivity() {
                 val message = JSONObject(text)
                 when (message.getString("type")) {
                     "offer" -> {
+                        val sdpObject = message.getJSONObject("sdp")
                         val sdp = SessionDescription(
-                            SessionDescription.Type.OFFER,
-                            message.getString("sdp")
+                            SessionDescription.Type.fromCanonicalForm(sdpObject.getString("type")),
+                            sdpObject.getString("sdp")
                         )
                         webRTCClient.setRemoteDescription(sdp, object : SdpObserver {
                             override fun onCreateSuccess(desc: SessionDescription?) {}
@@ -255,7 +256,10 @@ class MainActivity : ComponentActivity() {
                 desc?.let {
                     val message = JSONObject().apply {
                         put("type", "offer")
-                        put("sdp", it.description)
+                        put("sdp", JSONObject().apply {
+                            put("type", it.type.canonicalForm())  // "offer" или "answer"
+                            put("sdp", it.description)            // строка SDP
+                        })
                     }
                     webSocketClient.send(message)
                 }

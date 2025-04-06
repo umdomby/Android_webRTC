@@ -61,7 +61,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
 
     // WebRTC
-    implementation("com.dafruits:webrtc:123.0.0")
+    implementation("io.github.webrtc-sdk:android:125.6422.07")
 
     // WebSocket
     implementation("com.squareup.okhttp3:okhttp:4.11.0")
