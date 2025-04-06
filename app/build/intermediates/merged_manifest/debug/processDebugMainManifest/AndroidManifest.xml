@@ -14,6 +14,10 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
     <permission
         android:name="com.example.webrtcapp.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
         android:protectionLevel="signature" />
