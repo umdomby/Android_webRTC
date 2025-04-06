@@ -2,48 +2,51 @@ package com.example.webrtcapp
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.util.Log
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
-import org.webrtc.SdpObserver
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import org.json.JSONObject
 import org.webrtc.*
+import com.example.webrtcapp.WebSocketListener
 
 class MainActivity : ComponentActivity() {
     private lateinit var webRTCClient: WebRTCClient
     private lateinit var webSocketClient: WebSocketClient
-    private var localVideoView: SurfaceViewRenderer? = null
     private var remoteVideoView: SurfaceViewRenderer? = null
+    private val eglBase = EglBase.create()
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions.all { it.value }) {
+            initializeWebRTC()
+        } else {
+            Log.e("WebRTCApp", "Permissions not granted")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d("WebRTCApp", "onCreate started")
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 1)
-        }
+        val requiredPermissions = arrayOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.MODIFY_AUDIO_SETTINGS
+        )
 
-
-        // Запрос разрешений на камеру и микрофон
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            Log.d("WebRTCApp", "Requesting permissions")
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO),
-                1
-            )
+        if (requiredPermissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) {
+            initializeWebRTC()
+        } else {
+            requestPermissionLauncher.launch(requiredPermissions)
         }
 
         setContent {
@@ -76,7 +79,6 @@ class MainActivity : ComponentActivity() {
 
                     Button(
                         onClick = {
-                            Log.d("WebRTCApp", "Connect button clicked")
                             connectToRoom(username, room)
                             isConnected = true
                         },
@@ -89,7 +91,6 @@ class MainActivity : ComponentActivity() {
 
                     Button(
                         onClick = {
-                            Log.d("WebRTCApp", "Start call button clicked")
                             startCall()
                             isCallActive = true
                         },
@@ -109,16 +110,16 @@ class MainActivity : ComponentActivity() {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(200.dp)
+                            .height(300.dp)
                             .padding(8.dp)
                     ) {
                         AndroidView(
                             factory = { context ->
-                                Log.d("WebRTCApp", "Creating local video view")
-                                SurfaceViewRenderer(context).also {
-                                    it.init(EglBase.create().eglBaseContext, null)
-                                    it.setMirror(true) // Зеркальное отображение для фронтальной камеры
-                                    localVideoView = it
+                                SurfaceViewRenderer(context).also { view ->
+                                    view.init(eglBase.eglBaseContext, null)
+                                    view.setMirror(true)
+                                    view.setEnableHardwareScaler(true)
+                                    webRTCClient.createLocalStream(view)
                                 }
                             },
                             modifier = Modifier.weight(1f)
@@ -126,10 +127,10 @@ class MainActivity : ComponentActivity() {
 
                         AndroidView(
                             factory = { context ->
-                                Log.d("WebRTCApp", "Creating remote video view")
-                                SurfaceViewRenderer(context).also {
-                                    it.init(EglBase.create().eglBaseContext, null)
-                                    remoteVideoView = it
+                                SurfaceViewRenderer(context).also { view ->
+                                    view.init(eglBase.eglBaseContext, null)
+                                    view.setEnableHardwareScaler(true)
+                                    remoteVideoView = view
                                 }
                             },
                             modifier = Modifier.weight(1f)
@@ -140,31 +141,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 1) {
-            if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                Log.d("WebRTCApp", "Permissions granted")
-                // Повторная инициализация после получения разрешений
-                localVideoView?.let {
-                    webRTCClient.createLocalStream(it)
-                }
-            } else {
-                Log.e("WebRTCApp", "Permissions denied")
-                // Показать сообщение пользователю
-            }
-        }
-    }
-
-    private fun connectToRoom(username: String, room: String) {
-        Log.d("WebRTCApp", "Connecting to room: $room as $username")
-
-        // Инициализация WebRTCClient
+    private fun initializeWebRTC() {
         webRTCClient = WebRTCClient(
             context = this,
             observer = object : PeerConnection.Observer {
                 override fun onIceCandidate(candidate: IceCandidate?) {
-                    Log.d("WebRTCApp", "onIceCandidate: ${candidate?.sdpMid}")
                     candidate?.let {
                         val message = JSONObject().apply {
                             put("type", "ice_candidate")
@@ -178,98 +159,140 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {
-                    Log.d("WebRTCApp", "onIceCandidatesRemoved: ${candidates?.size} candidates")
-                }
-
-                override fun onSignalingChange(p0: PeerConnection.SignalingState?) {}
-                override fun onIceConnectionChange(p0: PeerConnection.IceConnectionState?) {}
-                override fun onIceConnectionReceivingChange(p0: Boolean) {}
-                override fun onIceGatheringChange(p0: PeerConnection.IceGatheringState?) {}
                 override fun onAddStream(stream: MediaStream?) {
-                    Log.d("WebRTCApp", "onAddStream: Remote stream added")
+                    Log.d("WebRTCApp", "onAddStream: ${stream?.id}")
                     stream?.videoTracks?.firstOrNull()?.addSink(remoteVideoView)
                 }
-                override fun onRemoveStream(p0: MediaStream?) {}
-                override fun onDataChannel(p0: DataChannel?) {}
+
+                override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {}
+                override fun onSignalingChange(state: PeerConnection.SignalingState?) {}
+                override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {}
+                override fun onIceConnectionReceivingChange(receiving: Boolean) {}
+                override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {}
+                override fun onRemoveStream(stream: MediaStream?) {}
+                override fun onDataChannel(channel: DataChannel?) {}
                 override fun onRenegotiationNeeded() {}
-                override fun onAddTrack(p0: RtpReceiver?, p1: Array<out MediaStream>?) {}
+                override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {}
             }
         )
 
-        // Создание локального потока
-        localVideoView?.let {
-            Log.d("WebRTCApp", "Creating local stream")
-            webRTCClient.createLocalStream(it)
-        }
-
-        // Инициализация WebSocketClient
-        webSocketClient = WebSocketClient(object : WebSocketListener() {
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d("WebRTCApp", "Received message: $text")
-                val message = JSONObject(text)
-                when (message.getString("type")) {
-                    "offer" -> {
-                        val sdpObject = message.getJSONObject("sdp")
-                        val sdp = SessionDescription(
-                            SessionDescription.Type.fromCanonicalForm(sdpObject.getString("type")),
-                            sdpObject.getString("sdp")
-                        )
-                        webRTCClient.setRemoteDescription(sdp, object : SdpObserver {
-                            override fun onCreateSuccess(desc: SessionDescription?) {}
-                            override fun onSetSuccess() {}
-                            override fun onCreateFailure(error: String?) {
-                                Log.e("WebRTCApp", "Failed to create remote description: $error")
-                            }
-                            override fun onSetFailure(error: String?) {
-                                Log.e("WebRTCApp", "Failed to set remote description: $error")
-                            }
-                        })
-                    }
-                    "ice_candidate" -> {
-                        val ice = message.getJSONObject("ice")
-                        val candidate = IceCandidate(
-                            ice.getString("sdpMid"),
-                            ice.getInt("sdpMLineIndex"),
-                            ice.getString("sdp")
-                        )
-                        webRTCClient.addIceCandidate(candidate)
+        webSocketClient = WebSocketClient(object : WebSocketListener {
+            override fun onMessage(message: JSONObject) {
+                runOnUiThread {
+                    when (message.getString("type")) {
+                        "offer" -> handleOffer(message)
+                        "answer" -> handleAnswer(message)
+                        "ice_candidate" -> handleIceCandidate(message)
                     }
                 }
             }
-        })
 
-        // Подключение к WebSocket
-        Log.d("WebRTCApp", "Connecting WebSocket")
+            override fun onConnected() {
+                Log.d("WebRTCApp", "WebSocket connected")
+            }
+
+            override fun onDisconnected() {
+                Log.d("WebRTCApp", "WebSocket disconnected")
+            }
+
+            override fun onError(error: String) {
+                Log.e("WebRTCApp", "WebSocket error: $error")
+            }
+        })
+    }
+
+    private fun handleOffer(message: JSONObject) {
+        val sdp = SessionDescription(
+            SessionDescription.Type.OFFER,
+            message.getJSONObject("sdp").getString("sdp")
+        )
+
+        webRTCClient.setRemoteDescription(sdp, object : SdpObserver {
+            override fun onCreateSuccess(desc: SessionDescription?) {}
+            override fun onSetSuccess() {
+                webRTCClient.createAnswer(object : SdpObserver {
+                    override fun onCreateSuccess(desc: SessionDescription?) {
+                        desc?.let {
+                            val answerMessage = JSONObject().apply {
+                                put("type", "answer")
+                                put("sdp", JSONObject().apply {
+                                    put("type", it.type.canonicalForm())
+                                    put("sdp", it.description)
+                                })
+                            }
+                            webSocketClient.send(answerMessage)
+                        }
+                    }
+                    override fun onSetSuccess() {}
+                    override fun onCreateFailure(error: String?) {
+                        Log.e("WebRTCApp", "Failed to create answer: $error")
+                    }
+                    override fun onSetFailure(error: String?) {
+                        Log.e("WebRTCApp", "Failed to set answer: $error")
+                    }
+                })
+            }
+            override fun onCreateFailure(error: String?) {
+                Log.e("WebRTCApp", "Failed to create offer: $error")
+            }
+            override fun onSetFailure(error: String?) {
+                Log.e("WebRTCApp", "Failed to set offer: $error")
+            }
+        })
+    }
+
+    private fun handleAnswer(message: JSONObject) {
+        val sdp = SessionDescription(
+            SessionDescription.Type.ANSWER,
+            message.getJSONObject("sdp").getString("sdp")
+        )
+        webRTCClient.setRemoteDescription(sdp, object : SdpObserver {
+            override fun onCreateSuccess(desc: SessionDescription?) {}
+            override fun onSetSuccess() {}
+            override fun onCreateFailure(error: String?) {
+                Log.e("WebRTCApp", "Failed to create answer: $error")
+            }
+            override fun onSetFailure(error: String?) {
+                Log.e("WebRTCApp", "Failed to set answer: $error")
+            }
+        })
+    }
+
+    private fun handleIceCandidate(message: JSONObject) {
+        val ice = message.getJSONObject("ice")
+        val candidate = IceCandidate(
+            ice.getString("sdpMid"),
+            ice.getInt("sdpMLineIndex"),
+            ice.getString("sdp")
+        )
+        webRTCClient.addIceCandidate(candidate)
+    }
+
+    private fun connectToRoom(username: String, room: String) {
         webSocketClient.connect("wss://anybet.site/ws")
 
-        // Отправка сообщения о присоединении к комнате
         val joinMessage = JSONObject().apply {
             put("type", "join")
             put("username", username)
             put("room", room)
         }
-        Log.d("WebRTCApp", "Sending join message")
         webSocketClient.send(joinMessage)
     }
 
     private fun startCall() {
-        Log.d("WebRTCApp", "Starting call")
         webRTCClient.createOffer(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription?) {
-                Log.d("WebRTCApp", "Offer created")
                 desc?.let {
-                    val message = JSONObject().apply {
+                    val offerMessage = JSONObject().apply {
                         put("type", "offer")
                         put("sdp", JSONObject().apply {
-                            put("type", it.type.canonicalForm())  // "offer" или "answer"
-                            put("sdp", it.description)            // строка SDP
+                            put("type", it.type.canonicalForm())
+                            put("sdp", it.description)
                         })
                     }
-                    webSocketClient.send(message)
+                    webSocketClient.send(offerMessage)
                 }
             }
-
             override fun onSetSuccess() {}
             override fun onCreateFailure(error: String?) {
                 Log.e("WebRTCApp", "Failed to create offer: $error")
@@ -281,13 +304,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        Log.d("WebRTCApp", "onDestroy")
-        if (::webSocketClient.isInitialized) {
-            webSocketClient.disconnect()
-        }
-        if (::webRTCClient.isInitialized) {
-            webRTCClient.close()
-        }
+        webSocketClient.disconnect()
+        webRTCClient.close()
+        eglBase.release()
         super.onDestroy()
     }
 }

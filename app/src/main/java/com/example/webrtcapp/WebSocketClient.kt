@@ -3,37 +3,65 @@ package com.example.webrtcapp
 import android.util.Log
 import okhttp3.*
 import org.json.JSONObject
-class WebSocketClient(
-    private val listener: WebSocketListener
-) {
+
+interface WebSocketListener {
+    fun onMessage(message: JSONObject)
+    fun onConnected()
+    fun onDisconnected()
+    fun onError(error: String)
+}
+
+class WebSocketClient(private val listener: WebSocketListener) {
     private var webSocket: WebSocket? = null
+    private var client: OkHttpClient? = null
 
     fun connect(url: String) {
-        val client = OkHttpClient()
-        val request = Request.Builder().url(url).build()
-        webSocket = client.newWebSocket(request, object : WebSocketListener() {
+        client = OkHttpClient.Builder()
+            .pingInterval(20, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+
+        val request = Request.Builder()
+            .url(url)
+            .build()
+
+        webSocket = client?.newWebSocket(request, object : okhttp3.WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d("WebRTCApp", "WebSocket connected")
-            }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e("WebRTCApp", "WebSocket connection failed: ${t.message}")
+                listener.onConnected()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d("WebRTCApp", "WebSocket message received: $text")
-                listener.onMessage(webSocket, text)
+                Log.d("WebRTCApp", "WebSocket message: $text")
+                try {
+                    listener.onMessage(JSONObject(text))
+                } catch (e: Exception) {
+                    listener.onError("Failed to parse message: ${e.message}")
+                }
+            }
+
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                Log.d("WebRTCApp", "WebSocket closed: $reason")
+                listener.onDisconnected()
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                Log.e("WebRTCApp", "WebSocket error: ${t.message}")
+                listener.onError(t.message ?: "Unknown error")
             }
         })
     }
 
     fun send(message: JSONObject) {
-        Log.d("WebRTCApp", "WebSocket sending message: $message")
-        webSocket?.send(message.toString())
+        try {
+            webSocket?.send(message.toString())
+        } catch (e: Exception) {
+            Log.e("WebRTCApp", "Failed to send message: ${e.message}")
+            listener.onError("Failed to send message: ${e.message}")
+        }
     }
 
     fun disconnect() {
-        Log.d("WebRTCApp", "WebSocket disconnecting")
-        webSocket?.close(1000, "Closing")
+        webSocket?.close(1000, "Normal closure")
+        client?.dispatcher?.executorService?.shutdown()
     }
 }
